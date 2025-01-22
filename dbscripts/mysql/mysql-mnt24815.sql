@@ -1,4 +1,3 @@
--- SQLBook: Code
 ----------------------------------------------------------------------------------------------------------------
 -- Date:        January 2025
 -- Author:      Eva Vasques
@@ -698,3 +697,4 @@ DROP TABLE alf_prop_unique_ctx_map_values_temp;
 DROP TABLE alf_prop_unique_ctx_duplicated_values_temp;
 
 DROP TABLE alf_audit_app_duplicated_temp;
+
