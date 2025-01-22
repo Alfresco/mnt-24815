@@ -4,7 +4,7 @@
 -- Reviewer:    Eva Vasques
 -- Description:
 --
--- Fix problem introduced by MNT-24137, the CrCHelper logic has been changed in ACS 23.3.2 and 23.4.0 causing 
+-- Fix problem introduced by MNT-24137, the CrCHelper logic has been changed in ACS 23.3.2 and 23.4.0 causing
 -- duplicated records in the database tables below:
 --
 --    - alf_prop_class
@@ -21,17 +21,6 @@
 ----------------------------------------------------------
 -- alf_prop_class
 ----------------------------------------------------------
-
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_prop_class
---
-SELECT * 
-FROM public.alf_prop_class
-ORDER BY id ASC
-;
-
 --
 -- Type:    TEMP TABLE
 --
@@ -61,43 +50,33 @@ ORDER BY id ASC
 --        |  "java.lang.String"   | 1                         | 21                      |
 --        -------------------------------------------------------------------------------
 --
-DROP TABLE alf_prop_class_duplicated_temp;
-
 CREATE TABLE alf_prop_class_duplicated_temp AS
-    SELECT * 
-    FROM (
-        SELECT 
-            java_class_name, 
-            (SELECT MIN(id) FROM alf_prop_class p WHERE t.java_class_name=p.java_class_name) AS before_problem_type_id,
-            (SELECT MAX(id) FROM alf_prop_class p WHERE t.java_class_name=p.java_class_name) AS after_problem_type_id
+SELECT *
+FROM (
+        SELECT
+            java_class_name,
+            (
+                SELECT MIN(id)
+                FROM alf_prop_class p
+                WHERE
+                    t.java_class_name = p.java_class_name
+            ) AS before_problem_type_id,
+            (
+                SELECT MAX(id)
+                FROM alf_prop_class p
+                WHERE
+                    t.java_class_name = p.java_class_name
+            ) AS after_problem_type_id
         FROM alf_prop_class t
-        GROUP BY 1
+        GROUP BY
+            1
     ) alf_prop_class_before_after_ids
-    WHERE before_problem_type_id <> after_problem_type_id;
-
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_prop_class_duplicated_temp
---
-SELECT * 
-FROM alf_prop_class_duplicated_temp 
-ORDER BY after_problem_type_id DESC
-;
+WHERE
+    before_problem_type_id <> after_problem_type_id;
 
 ----------------------------------------------------------
 -- alf_prop_string_value
 ----------------------------------------------------------
-
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_prop_string_value
---
-SELECT *
-FROM alf_prop_string_value
-WHERE string_value='.sharedIds'
-;
 
 --
 -- Type:    TEMP TABLE
@@ -129,30 +108,26 @@ WHERE string_value='.sharedIds'
 --        | ".sharedIds"    | 37                      | 918                    | 1096111251     |
 --        ---------------------------------------------------------------------------------------
 --
-DROP TABLE alf_prop_string_value_duplicated_temp;
-
 CREATE TABLE alf_prop_string_value_duplicated_temp AS
-    SELECT * 
-    FROM (
-        SELECT 
-            string_value, 
-            (SELECT MIN(id) FROM alf_prop_string_value p WHERE t.string_value=p.string_value) AS before_problem_sv_id,
-            (SELECT MAX(id) FROM alf_prop_string_value p WHERE t.string_value=p.string_value) AS after_problem_sv_id,
-            string_crc crc
+SELECT
+    string_value,
+    before_problem_sv_id,
+    after_problem_sv_id,
+    string_crc
+FROM (
+        SELECT
+            string_value,
+            string_crc,
+            COUNT(id) AS duplicates,
+            MIN(id) AS before_problem_sv_id,
+            MAX(id) AS after_problem_sv_id
         FROM alf_prop_string_value t
-        GROUP BY 1, 4
+        GROUP BY
+            1,
+            2
     ) alf_prop_string_value_before_after_ids
-    WHERE before_problem_sv_id <> after_problem_sv_id;
-
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_prop_string_value_duplicated_temp
---
-SELECT *
-FROM alf_prop_string_value_duplicated_temp
-ORDER BY before_problem_sv_id
-;
+WHERE
+    duplicates > 1;
 
 --
 -- Type:    UPDATE
@@ -164,53 +139,49 @@ ORDER BY before_problem_sv_id
 --        Updates all records where 'string_end_lower' column is not lowercase
 --
 --
-UPDATE alf_prop_string_value SET string_end_lower=LOWER(string_end_lower)
-WHERE id IN (
-    SELECT 
-        id
-    FROM 
-        public.alf_prop_string_value
-    WHERE 
-        LOWER(string_end_lower) != string_end_lower
-        AND string_value NOT IN ( 
-            SELECT string_value 
-            FROM alf_prop_string_value_duplicated_temp 
-        )
-);
+UPDATE alf_prop_string_value
+SET
+    string_end_lower = LOWER(string_end_lower)
+WHERE
+    id IN (
+        SELECT id
+        FROM alf_prop_string_value
+        WHERE
+            LOWER(string_end_lower) != string_end_lower
+            AND string_value NOT IN (
+                SELECT string_value
+                FROM
+                    alf_prop_string_value_duplicated_temp
+            )
+    );
 
 ----------------------------------------------------------
 -- alf_prop_value
 ----------------------------------------------------------
 
 --
--- Type:    SELECT (to remove)
---
--- Table:   alf_prop_value
---
-SELECT * 
-FROM alf_prop_value
-WHERE long_value IN (37,918)
-ORDER BY id ASC
-;
-
---
 -- Type:    UPDATE
 
 -- Table:   alf_prop_value
--- 
--- Description: 
 --
---        Fix duplicated string values by replacing the 'long_value' column with the 
+-- Description:
+--
+--        Fix duplicated string values by replacing the 'long_value' column with the
 --        original 'alf_prop_string_value.id' (before migration)
 --
-UPDATE alf_prop_value SET long_value=apsvdt.before_problem_sv_id
-FROM alf_prop_string_value_duplicated_temp apsvdt
-WHERE long_value=apsvdt.after_problem_sv_id
-AND actual_type_id IN (
-    SELECT MAX(id)
-    FROM alf_prop_class apc
-    WHERE java_class_name='java.lang.String'
-);
+UPDATE alf_prop_value
+SET
+    long_value = apsvdt.before_problem_sv_id
+FROM
+    alf_prop_string_value_duplicated_temp apsvdt
+WHERE
+    long_value = apsvdt.after_problem_sv_id
+    AND actual_type_id IN (
+        SELECT MAX(id)
+        FROM alf_prop_class apc
+        WHERE
+            java_class_name = 'java.lang.String'
+    );
 
 --
 -- Type:    TEMP TABLE
@@ -220,11 +191,11 @@ AND actual_type_id IN (
 -- Description:
 --
 --        Contains the records from 'alf_prop_value' table that cannot have the 'actual_type_id' column
---        updated with value from 'alf_prop_class_duplicated_temp.before_problem_type_id', otherwise, the 
---         index 'idx_alf_propv_act' (actual_type_id, long_value) would be violated since it is not possible 
+--        updated with value from 'alf_prop_class_duplicated_temp.before_problem_type_id', otherwise, the
+--         index 'idx_alf_propv_act' (actual_type_id, long_value) would be violated since it is not possible
 --         to have duplicated combinations.
--- 
---        The goal is to have a correspondence between property values that have been duplicated after 
+--
+--        The goal is to have a correspondence between property values that have been duplicated after
 --        migration and the correspondent prop value that existed prior to migration. This way all the tables
 --        that reference 'alf_prop_value.id' column can be updated accordingly.
 --
@@ -260,38 +231,31 @@ AND actual_type_id IN (
 --        | 914               | 82                  | 21                | 1                                 |                  |
 --        ----------------------------------------------------------------------------------------------------------------------
 --
-DROP TABLE alf_prop_value_duplicated_temp;
-
 CREATE TABLE alf_prop_value_duplicated_temp AS
-    SELECT 
-        apv.id after_problem_id, 
-        (
-            SELECT id 
-            FROM alf_prop_value apv2 
-            WHERE apv2.actual_type_id=apcdt.before_problem_type_id 
-            AND apv2.long_value=apv.long_value
-        ) before_problem_id,
-        apv.actual_type_id, 
-        apcdt.before_problem_type_id actual_type_id_before_problem,
+SELECT
+    apv.id after_problem_id,
+    (
+        SELECT id
+        FROM alf_prop_value apv2
+        WHERE
+            apv2.actual_type_id = apcdt.before_problem_type_id
+            AND apv2.long_value = apv.long_value
+    ) before_problem_id,
+    apv.actual_type_id,
+    apcdt.before_problem_type_id actual_type_id_before_problem,
+    apv.long_value
+FROM
+    alf_prop_value apv,
+    alf_prop_class_duplicated_temp apcdt
+WHERE
+    apv.actual_type_id = apcdt.after_problem_type_id
+    AND (
+        apcdt.before_problem_type_id,
         apv.long_value
-    FROM 
-        alf_prop_value apv, 
-        alf_prop_class_duplicated_temp apcdt
-    WHERE apv.actual_type_id=apcdt.after_problem_type_id
-    AND (apcdt.before_problem_type_id,apv.long_value) IN (
-        SELECT actual_type_id, long_value 
+    ) IN (
+        SELECT actual_type_id, long_value
         FROM alf_prop_value
     );
-
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_prop_value_duplicated_temp
---
-SELECT * 
-FROM alf_prop_value_duplicated_temp 
-ORDER BY after_problem_id ASC
-;
 
 --
 -- Type:    TEMP TABLE
@@ -301,34 +265,27 @@ ORDER BY after_problem_id ASC
 -- Description:
 --
 --        Contains the records from 'alf_prop_value' table that can have the 'actual_type_id' column updated with
---        value from 'alf_prop_class_duplicated_temp.before_problem_type_id' which means these records were not 
---        duplicated after migration.    
+--        value from 'alf_prop_class_duplicated_temp.before_problem_type_id' which means these records were not
+--        duplicated after migration.
 --
-DROP TABLE alf_prop_value_not_duplicated_temp;
-
 CREATE TABLE alf_prop_value_not_duplicated_temp AS
-    SELECT 
-        apv.id after_problem_id,
-        apv.actual_type_id, 
-        apcdt.before_problem_type_id actual_type_id_before_problem,
+SELECT
+    apv.id after_problem_id,
+    apv.actual_type_id,
+    apcdt.before_problem_type_id actual_type_id_before_problem,
+    apv.long_value
+FROM
+    alf_prop_value apv,
+    alf_prop_class_duplicated_temp apcdt
+WHERE
+    apv.actual_type_id = apcdt.after_problem_type_id
+    AND (
+        apcdt.before_problem_type_id,
         apv.long_value
-    FROM 
-        alf_prop_value apv, 
-        alf_prop_class_duplicated_temp apcdt
-    WHERE apv.actual_type_id=apcdt.after_problem_type_id
-    AND (apcdt.before_problem_type_id,apv.long_value) NOT IN (
-        SELECT actual_type_id, long_value 
+    ) NOT IN (
+        SELECT actual_type_id, long_value
         FROM alf_prop_value
     );
-
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_prop_value_not_duplicated_temp
---
-SELECT * 
-FROM alf_prop_value_not_duplicated_temp 
-;
 
 --
 -- Type:    UPDATE
@@ -337,29 +294,20 @@ FROM alf_prop_value_not_duplicated_temp
 --
 -- Description:
 --
---        Fix the 'alf_prop_value.actual_type_id' column of non-duplicated records by using 
+--        Fix the 'alf_prop_value.actual_type_id' column of non-duplicated records by using
 --        'alf_prop_value_not_duplicated_temp.actual_type_id_before_problem' column
 --
 UPDATE alf_prop_value apv
-SET actual_type_id=apvndt.actual_type_id_before_problem
-FROM alf_prop_value_not_duplicated_temp apvndt
-WHERE apv.id=apvndt.after_problem_id;
+SET
+    actual_type_id = apvndt.actual_type_id_before_problem
+FROM
+    alf_prop_value_not_duplicated_temp apvndt
+WHERE
+    apv.id = apvndt.after_problem_id;
 
 ----------------------------------------------------------
 -- alf_prop_unique_ctx
 ----------------------------------------------------------
-
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_prop_unique_ctx
---
-SELECT * 
-FROM alf_prop_unique_ctx
---WHERE id IN (38,71)
---WHERE value2_prop_id = 914
-ORDER BY id ASC
-;
 
 --
 -- Type:    TEMP TABLE
@@ -392,32 +340,35 @@ ORDER BY id ASC
 --        | 71    | 913                  | 916                  | 879                   | 81                      | 86                    | 3                     | 685         |
 --        -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 --
-DROP TABLE alf_prop_unique_ctx_map_values_temp;
-
 CREATE TABLE alf_prop_unique_ctx_map_values_temp AS
-    SELECT 
-        apuc.id, 
-        apuc.value1_prop_id value1_after_problem,
-        apuc.value2_prop_id value2_after_problem,
-        apuc.value3_prop_id value3_after_problem,
-        (SELECT t1.before_problem_id FROM alf_prop_value_duplicated_temp t1 WHERE t1.after_problem_id=apuc.value1_prop_id) value1_before_problem,
-        (SELECT t1.before_problem_id FROM alf_prop_value_duplicated_temp t1 WHERE t1.after_problem_id=apuc.value2_prop_id) value2_before_problem,
-        (SELECT t1.before_problem_id FROM alf_prop_value_duplicated_temp t1 WHERE t1.after_problem_id=apuc.value3_prop_id) value3_before_problem,
-        prop1_id prop1_id_after_problem
-    FROM 
-        alf_prop_unique_ctx apuc;
-
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_prop_unique_ctx_map_values_temp
---
-SELECT * 
-FROM alf_prop_unique_ctx_map_values_temp
-WHERE value1_before_problem=51
-OR value2_before_problem=51
-OR value3_before_problem=51
-;
+SELECT
+    apuc.id,
+    apuc.value1_prop_id value1_after_problem,
+    apuc.value2_prop_id value2_after_problem,
+    apuc.value3_prop_id value3_after_problem,
+    (
+        SELECT t1.before_problem_id
+        FROM
+            alf_prop_value_duplicated_temp t1
+        WHERE
+            t1.after_problem_id = apuc.value1_prop_id
+    ) value1_before_problem,
+    (
+        SELECT t1.before_problem_id
+        FROM
+            alf_prop_value_duplicated_temp t1
+        WHERE
+            t1.after_problem_id = apuc.value2_prop_id
+    ) value2_before_problem,
+    (
+        SELECT t1.before_problem_id
+        FROM
+            alf_prop_value_duplicated_temp t1
+        WHERE
+            t1.after_problem_id = apuc.value3_prop_id
+    ) value3_before_problem,
+    prop1_id prop1_id_after_problem
+FROM alf_prop_unique_ctx apuc;
 
 --
 -- Type:    TEMP TABLE
@@ -449,37 +400,27 @@ OR value3_before_problem=51
 --        | 71                | 38                | 913                  | 916                  | 879                  | 81                    | 86                    | 3                     |
 --        --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 --
-DROP TABLE alf_prop_unique_ctx_duplicated_values_temp;
-
 CREATE TABLE alf_prop_unique_ctx_duplicated_values_temp AS
-    SELECT 
-        apucmvt.id after_problem_id,
-        apuc.id before_problem_id,
-        apucmvt.value1_after_problem,
-        apucmvt.value2_after_problem,
-        apucmvt.value3_after_problem,
-        apucmvt.value1_before_problem,
-        apucmvt.value2_before_problem,
-        apucmvt.value3_before_problem,
-        apucmvt.prop1_id_after_problem
-    FROM
-        alf_prop_unique_ctx_map_values_temp apucmvt,
-        alf_prop_unique_ctx apuc
-    WHERE apucmvt.value1_before_problem IS NOT NULL 
-    AND apucmvt.value2_before_problem IS NOT NULL 
+SELECT
+    apucmvt.id after_problem_id,
+    apuc.id before_problem_id,
+    apucmvt.value1_after_problem,
+    apucmvt.value2_after_problem,
+    apucmvt.value3_after_problem,
+    apucmvt.value1_before_problem,
+    apucmvt.value2_before_problem,
+    apucmvt.value3_before_problem,
+    apucmvt.prop1_id_after_problem
+FROM
+    alf_prop_unique_ctx_map_values_temp apucmvt,
+    alf_prop_unique_ctx apuc
+WHERE
+    apucmvt.value1_before_problem IS NOT NULL
+    AND apucmvt.value2_before_problem IS NOT NULL
     AND apucmvt.value3_before_problem IS NOT NULL
-    AND apuc.value1_prop_id=apucmvt.value1_before_problem 
-    AND apuc.value2_prop_id=apucmvt.value2_before_problem 
-    AND apuc.value3_prop_id=apucmvt.value3_before_problem;
-
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_prop_unique_ctx_duplicated_values_temp
---
-SELECT * 
-FROM alf_prop_unique_ctx_duplicated_values_temp
-;
+    AND apuc.value1_prop_id = apucmvt.value1_before_problem
+    AND apuc.value2_prop_id = apucmvt.value2_before_problem
+    AND apuc.value3_prop_id = apucmvt.value3_before_problem;
 
 --
 -- Type:    UPDATE
@@ -491,15 +432,26 @@ FROM alf_prop_unique_ctx_duplicated_values_temp
 --        Fix 'value1_prop_id' column with id used before problem
 --
 UPDATE alf_prop_unique_ctx apuc
-SET value1_prop_id=apucmvt.value1_before_problem
-FROM alf_prop_unique_ctx_map_values_temp apucmvt
-WHERE apuc.value1_prop_id=apucmvt.value1_after_problem
-AND apucmvt.value1_before_problem IS NOT NULL
-AND apucmvt.prop1_id_after_problem=apuc.prop1_id
-AND (apucmvt.value1_before_problem, apuc.value2_prop_id, apuc.value3_prop_id) NOT IN (
-    SELECT value1_before_problem, value2_before_problem, value3_before_problem
-    FROM alf_prop_unique_ctx_duplicated_values_temp
-);
+SET
+    value1_prop_id = apucmvt.value1_before_problem
+FROM
+    alf_prop_unique_ctx_map_values_temp apucmvt
+WHERE
+    apuc.value1_prop_id = apucmvt.value1_after_problem
+    AND apucmvt.value1_before_problem IS NOT NULL
+    AND apucmvt.prop1_id_after_problem = apuc.prop1_id
+    AND (
+        apucmvt.value1_before_problem,
+        apuc.value2_prop_id,
+        apuc.value3_prop_id
+    ) NOT IN (
+        SELECT
+            value1_before_problem,
+            value2_before_problem,
+            value3_before_problem
+        FROM
+            alf_prop_unique_ctx_duplicated_values_temp
+    );
 
 --
 -- Type:    UPDATE
@@ -511,15 +463,26 @@ AND (apucmvt.value1_before_problem, apuc.value2_prop_id, apuc.value3_prop_id) NO
 --        Fix 'value2_prop_id' column with id used before problem
 --
 UPDATE alf_prop_unique_ctx apuc
-SET value2_prop_id=apucmvt.value2_before_problem
-FROM alf_prop_unique_ctx_map_values_temp apucmvt
-WHERE apuc.value2_prop_id=apucmvt.value2_after_problem
-AND apucmvt.value2_before_problem IS NOT NULL
-AND apucmvt.prop1_id_after_problem=apuc.prop1_id
-AND (apuc.value1_prop_id, apucmvt.value2_before_problem, apuc.value3_prop_id) NOT IN (
-    SELECT value1_before_problem, value2_before_problem, value3_before_problem
-    FROM alf_prop_unique_ctx_duplicated_values_temp
-);
+SET
+    value2_prop_id = apucmvt.value2_before_problem
+FROM
+    alf_prop_unique_ctx_map_values_temp apucmvt
+WHERE
+    apuc.value2_prop_id = apucmvt.value2_after_problem
+    AND apucmvt.value2_before_problem IS NOT NULL
+    AND apucmvt.prop1_id_after_problem = apuc.prop1_id
+    AND (
+        apuc.value1_prop_id,
+        apucmvt.value2_before_problem,
+        apuc.value3_prop_id
+    ) NOT IN (
+        SELECT
+            value1_before_problem,
+            value2_before_problem,
+            value3_before_problem
+        FROM
+            alf_prop_unique_ctx_duplicated_values_temp
+    );
 
 --
 -- Type:    UPDATE
@@ -531,34 +494,30 @@ AND (apuc.value1_prop_id, apucmvt.value2_before_problem, apuc.value3_prop_id) NO
 --        Fix 'value3_prop_id' column with id used before problem
 --
 UPDATE alf_prop_unique_ctx apuc
-SET value3_prop_id=apucmvt.value3_before_problem
-FROM alf_prop_unique_ctx_map_values_temp apucmvt
-WHERE apuc.value3_prop_id=apucmvt.value3_after_problem
-AND apucmvt.value3_before_problem IS NOT NULL
-AND apucmvt.prop1_id_after_problem=apuc.prop1_id
-AND (apuc.value1_prop_id, apuc.value2_prop_id, apucmvt.value3_before_problem) NOT IN (
-    SELECT value1_before_problem, value2_before_problem, value3_before_problem
-    FROM alf_prop_unique_ctx_duplicated_values_temp
-);
+SET
+    value3_prop_id = apucmvt.value3_before_problem
+FROM
+    alf_prop_unique_ctx_map_values_temp apucmvt
+WHERE
+    apuc.value3_prop_id = apucmvt.value3_after_problem
+    AND apucmvt.value3_before_problem IS NOT NULL
+    AND apucmvt.prop1_id_after_problem = apuc.prop1_id
+    AND (
+        apuc.value1_prop_id,
+        apuc.value2_prop_id,
+        apucmvt.value3_before_problem
+    ) NOT IN (
+        SELECT
+            value1_before_problem,
+            value2_before_problem,
+            value3_before_problem
+        FROM
+            alf_prop_unique_ctx_duplicated_values_temp
+    );
 
 ----------------------------------------------------------
 -- alf_prop_link
 ----------------------------------------------------------
-
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_prop_link
---
-SELECT * 
-FROM alf_prop_link
---WHERE root_prop_id IN (49,685)
-WHERE value_prop_id IN (
-    SELECT after_problem_id
-    FROM alf_prop_value_duplicated_temp
-)
-ORDER BY value_prop_id ASC
-;
 
 --
 -- Type:    UPDATE
@@ -570,9 +529,12 @@ ORDER BY value_prop_id ASC
 --        Fix 'alf_prop_link.key_prop_id' column with id before migration.
 --
 UPDATE alf_prop_link apl
-SET key_prop_id=apvdt.before_problem_id
-FROM alf_prop_value_duplicated_temp apvdt
-WHERE apl.key_prop_id=apvdt.after_problem_id;
+SET
+    key_prop_id = apvdt.before_problem_id
+FROM
+    alf_prop_value_duplicated_temp apvdt
+WHERE
+    apl.key_prop_id = apvdt.after_problem_id;
 
 --
 -- Type:    UPDATE
@@ -584,20 +546,16 @@ WHERE apl.key_prop_id=apvdt.after_problem_id;
 --        Fix 'alf_prop_link.key_prop_id' column with id before migration.
 --
 UPDATE alf_prop_link apl
-SET value_prop_id=apvdt.before_problem_id
-FROM alf_prop_value_duplicated_temp apvdt
-WHERE apl.value_prop_id=apvdt.after_problem_id;
+SET
+    value_prop_id = apvdt.before_problem_id
+FROM
+    alf_prop_value_duplicated_temp apvdt
+WHERE
+    apl.value_prop_id = apvdt.after_problem_id;
 
 ----------------------------------------------------------
 -- alf_audit_app
 ----------------------------------------------------------
-
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_audit_app
---
-SELECT * FROM alf_audit_app;
 
 --
 -- Type:    TEMP TABLE
@@ -606,7 +564,7 @@ SELECT * FROM alf_audit_app;
 --
 -- Description:
 --
---        Contains the relationship between audit app ids that have been duplicated and the 
+--        Contains the relationship between audit app ids that have been duplicated and the
 --        id that was used before migration.
 --
 -- Example:
@@ -647,70 +605,107 @@ SELECT * FROM alf_audit_app;
 --        | 8                   | 4                    |
 --        ----------------------------------------------
 --
-DROP TABLE alf_audit_app_duplicated_temp;
-
 CREATE TABLE alf_audit_app_duplicated_temp AS
-    SELECT 
-        aaa.id after_problem_aa_id,
-        (SELECT id FROM alf_audit_app aaa2 WHERE aaa2.app_name_id=apvdt.before_problem_id) before_problem_aa_id
-    FROM 
-        alf_audit_app aaa, 
-        alf_prop_value_duplicated_temp apvdt
-    WHERE aaa.app_name_id=apvdt.after_problem_id;
-    
-----------------------------------------------------------
--- alf_audit_entry    
-----------------------------------------------------------
+SELECT
+    aaa.id after_problem_aa_id,
+    (
+        SELECT id
+        FROM alf_audit_app aaa2
+        WHERE
+            aaa2.app_name_id = apvdt.before_problem_id
+    ) before_problem_aa_id
+FROM
+    alf_audit_app aaa,
+    alf_prop_value_duplicated_temp apvdt
+WHERE
+    aaa.app_name_id = apvdt.after_problem_id;
 
---
--- Type:    SELECT (to remove)
---
--- Table:   alf_audit_entry
---
-SELECT *
-FROM alf_audit_entry
-;
+select count(1) from alf_audit_app_duplicated_temp;
+
+----------------------------------------------------------
+-- alf_audit_entry
+----------------------------------------------------------
 
 --
 -- Type:    UPDATE
 --
 -- Table:   alf_audit_entry
--- 
+--
 -- Description:
 --
 --        Fix 'alf_audit_entry.audit_app_id' with 'alf_audit_app.id' that was used before the migration.
 --
 UPDATE alf_audit_entry aae
-SET audit_app_id=aaadt.before_problem_aa_id
-FROM alf_audit_app_duplicated_temp aaadt
-WHERE aae.audit_app_id=aaadt.after_problem_aa_id;
+SET
+    audit_app_id = aaadt.before_problem_aa_id
+FROM
+    alf_audit_app_duplicated_temp aaadt
+WHERE
+    aae.audit_app_id = aaadt.after_problem_aa_id;
 
 --
 -- Type:    UPDATE
 --
 -- Table:   alf_audit_entry
--- 
+--
 -- Description:
 --
 --        Fix 'alf_audit_entry.audit_user_id' with id from 'alf_prop_value' table that was used before migration.
 --
 UPDATE alf_audit_entry aae
-SET audit_user_id=apvdt.before_problem_id
-FROM alf_prop_value_duplicated_temp apvdt
-WHERE aae.audit_user_id=apvdt.after_problem_id;
+SET
+    audit_user_id = apvdt.before_problem_id
+FROM
+    alf_prop_value_duplicated_temp apvdt
+WHERE
+    aae.audit_user_id = apvdt.after_problem_id;
 
 ----------------------------------------------------------
--- DELETE (to remove)    
+-- DELETE DUPLICATES
 ----------------------------------------------------------
 
-DELETE FROM alf_prop_class 
-WHERE id IN (
-	SELECT after_problem_type_id 
-	FROM alf_prop_class_duplicated_temp
-);
+DELETE FROM alf_prop_class
+WHERE
+    id IN (
+        SELECT after_problem_type_id
+        FROM alf_prop_class_duplicated_temp
+    );
 
 DELETE FROM alf_audit_app
-WHERE id IN (
-	SELECT after_problem_aa_id
-	FROM alf_audit_app_duplicated_temp
-);
+WHERE
+    id IN (
+        SELECT after_problem_aa_id
+        FROM alf_audit_app_duplicated_temp
+    );
+
+DELETE FROM alf_prop_value
+WHERE
+    id IN (
+        SELECT after_problem_id
+        FROM alf_prop_value_duplicated_temp
+    );
+
+DELETE FROM alf_prop_string_value
+WHERE
+    id IN (
+        SELECT after_problem_sv_id
+        FROM
+            alf_prop_string_value_duplicated_temp
+    );
+
+----------------------------------------------------------
+-- REMOVE TEMP TABLES
+----------------------------------------------------------
+DROP TABLE alf_prop_class_duplicated_temp;
+
+DROP TABLE alf_prop_string_value_duplicated_temp;
+
+DROP TABLE alf_prop_value_duplicated_temp;
+
+DROP TABLE alf_prop_value_not_duplicated_temp;
+
+DROP TABLE alf_prop_unique_ctx_map_values_temp;
+
+DROP TABLE alf_prop_unique_ctx_duplicated_values_temp;
+
+DROP TABLE alf_audit_app_duplicated_temp;
