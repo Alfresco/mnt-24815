@@ -15,6 +15,9 @@ This repo will contain all fixes necessary to revert the data changes caused by 
 
 ### How to fix
 - Install a corrected version (23.3.3 or 23.4.1)
+- After the upgrade to a fixed version, stop all services connected to the DB, including alfresco
+- Depending on your DBMS, run the corresponding SQL Script in folder dbscripts
+- Start alfresco and run job Prop Tables Cleaner
 
 //TODO
 
