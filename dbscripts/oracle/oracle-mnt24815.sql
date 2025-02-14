@@ -771,13 +771,6 @@ where
         from alfresco.alf_prop_value_duplicated_temp
     );
 
-delete from alfresco.alf_prop_string_value
-where
-    id in (
-        select after_problem_sv_id
-        from alfresco.alf_prop_string_value_duplicated_temp
-    );
-
 COMMIT;
 
 ----------------------------------------------------------

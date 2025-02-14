@@ -673,14 +673,6 @@ WHERE
         FROM alf_prop_value_duplicated_temp
     );
 
-DELETE FROM alf_prop_string_value
-WHERE
-    id IN (
-        SELECT after_problem_sv_id
-        FROM
-            alf_prop_string_value_duplicated_temp
-    );
-
 ----------------------------------------------------------
 -- REMOVE TEMP TABLES
 ----------------------------------------------------------
