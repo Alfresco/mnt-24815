@@ -33,9 +33,7 @@ To rectify the issue:
    - Check that the affected functionalities (Quick Links, Audit Logs, AGS) are restored.  
    - Manually inspect the database to confirm the expected changes.
 
-6. **Restart Alfresco**: Start Alfresco and run the "Prop Tables Cleaner" job.
-
-7. **Final Validation**:  
+6. **Final Validation**:  
    - Test all relevant functionalities to ensure the issue is resolved.  
    - Only archive the backup once you have confirmed everything is working as expected.
 
